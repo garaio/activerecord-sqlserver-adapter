@@ -73,6 +73,7 @@ module ActiveRecord
         end
         
         def binary_to_string(value)
+          value = "" unless value.is_a?(String) # prevent TypeError when Integers are passed along (Locking)
           value =~ /[^[:xdigit:]]/ ? value : [value].pack('H*')
         end
         
