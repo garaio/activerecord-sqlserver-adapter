@@ -2,12 +2,12 @@ module ActiveRecord
   module ConnectionAdapters
     module Sqlserver
       module DatabaseStatements
-        
+
         def select_one(sql, name = nil)
           result = raw_select sql, name, :fetch => :one
           (result && result.first.present?) ? result.first : nil
         end
-        
+
         def select_rows(sql, name = nil)
           raw_select sql, name, :fetch => :rows
         end
@@ -65,9 +65,9 @@ module ActiveRecord
           where_sql.sub!(limit,'')
           "WHERE #{quoted_primary_key} IN (SELECT #{limit} #{quoted_primary_key} FROM #{quoted_table_name} #{where_sql})"
         end
-        
+
         # === SQLServer Specific ======================================== #
-        
+
         def execute_procedure(proc_name, *variables)
           vars = variables.map{ |v| quote(v) }.join(', ')
           sql = "EXEC #{proc_name} #{vars}".strip
@@ -102,15 +102,15 @@ module ActiveRecord
             end
           end
         end
-        
+
         def use_database(database=nil)
           database ||= @connection_options[:database]
           do_execute "USE #{quote_table_name(database)}" unless database.blank?
         end
-        
+
         def user_options
           info_schema_query do
-            select_rows("dbcc useroptions").inject(HashWithIndifferentAccess.new) do |values,row| 
+            select_rows("dbcc useroptions").inject(HashWithIndifferentAccess.new) do |values,row|
               set_option = row[0].gsub(/\s+/,'_')
               user_value = row[1]
               values[set_option] = user_value
@@ -124,22 +124,22 @@ module ActiveRecord
           initial_isolation_level = user_options[:isolation_level] || "READ COMMITTED"
           do_execute "SET TRANSACTION ISOLATION LEVEL #{isolation_level}"
           begin
-            yield 
+            yield
           ensure
             do_execute "SET TRANSACTION ISOLATION LEVEL #{initial_isolation_level}"
           end if block_given?
         end
-        
+
         def newid_function
           select_value "SELECT NEWID()"
         end
-        
+
         def newsequentialid_function
           select_value "SELECT NEWSEQUENTIALID()"
         end
-        
+
         # === SQLServer Specific (Rake/Test Helpers) ==================== #
-        
+
         def recreate_database
           remove_database_connections_and_rollback do
             do_execute "EXEC sp_MSforeachtable 'DROP TABLE ?'"
@@ -181,18 +181,18 @@ module ActiveRecord
         def current_database
           select_value 'SELECT DB_NAME()'
         end
-        
+
         def charset
           select_value "SELECT SERVERPROPERTY('SqlCharSetName')"
         end
-        
-        
+
+
         protected
-        
+
         def select(sql, name = nil)
           raw_select sql, name, :fetch => :all
         end
-        
+
         def insert_sql(sql, name = nil, pk = nil, id_value = nil, sequence_name = nil)
           @insert_sql = true
           case @connection_options[:mode]
@@ -202,7 +202,7 @@ module ActiveRecord
             super || select_value("SELECT CAST(SCOPE_IDENTITY() AS bigint) AS Ident")
           end
         end
-        
+
         def update_sql(sql, name = nil)
           @update_sql = true
           case @connection_options[:mode]
@@ -213,13 +213,13 @@ module ActiveRecord
             select_value('SELECT @@ROWCOUNT AS AffectedRows')
           end
         end
-        
+
         # === SQLServer Specific ======================================== #
-        
+
         def valid_isolation_levels
           ["READ COMMITTED", "READ UNCOMMITTED", "REPEATABLE READ", "SERIALIZABLE", "SNAPSHOT"]
         end
-        
+
         # === SQLServer Specific (Executing) ============================ #
 
         def do_execute(sql, name = nil)
@@ -228,7 +228,7 @@ module ActiveRecord
             with_auto_reconnect { raw_connection_do(sql) }
           end
         end
-        
+
         def raw_connection_do(sql)
           case @connection_options[:mode]
           when :dblib
@@ -242,7 +242,7 @@ module ActiveRecord
           @insert_sql = false
           @update_sql = false
         end
-        
+
         # === SQLServer Specific (Selecting) ============================ #
 
         def raw_select(sql, name=nil, options={})
@@ -255,7 +255,7 @@ module ActiveRecord
             end
           end
         end
-        
+
         def raw_connection_run(sql)
           with_auto_reconnect do
             case @connection_options[:mode]
@@ -268,7 +268,7 @@ module ActiveRecord
             end
           end
         end
-        
+
         def handle_more_results?(handle)
           case @connection_options[:mode]
           when :dblib
@@ -278,18 +278,25 @@ module ActiveRecord
             handle.next_result
           end
         end
-        
+
         def handle_to_names_and_values(handle, options={})
-          case @connection_options[:mode]
-          when :dblib
-            handle_to_names_and_values_dblib(handle, options)
-          when :odbc
-            handle_to_names_and_values_odbc(handle, options)
-          when :adonet
-            handle_to_names_and_values_adonet(handle, options)
+          result = case @connection_options[:mode]
+                   when :dblib
+                     handle_to_names_and_values_dblib(handle, options)
+                   when :odbc
+                     handle_to_names_and_values_odbc(handle, options)
+                   when :adonet
+                     handle_to_names_and_values_adonet(handle, options)
+                   end
+          result.each do |entry|
+            next unless entry.is_a? Hash
+            entry.each do |key, value|
+              value.force_encoding("UTF-8") if value && value.is_a?(String)
+            end
           end
+          result
         end
-        
+
         def handle_to_names_and_values_dblib(handle, options={})
           query_options = {}.tap do |qo|
             qo[:timezone] = ActiveRecord::Base.default_timezone || :utc
@@ -298,7 +305,7 @@ module ActiveRecord
           end
           handle.each(query_options)
         end
-        
+
         def handle_to_names_and_values_odbc(handle, options={})
           @connection.use_utc = ActiveRecord::Base.default_timezone == :utc if @connection_supports_native_types
           case options[:fetch]
@@ -308,14 +315,14 @@ module ActiveRecord
                 handle.each_hash || []
               else
                 row = handle.fetch_hash
-                rows = row ? [row] : [[]]                    
+                rows = row ? [row] : [[]]
               end
             else
               rows = if options[:fetch] == :all
                        handle.fetch_all || []
                      else
                        row = handle.fetch
-                       row ? [row] : [[]]                     
+                       row ? [row] : [[]]
                      end
               names = handle.columns(true).map{ |c| c.name }
               names_and_values = []
@@ -394,10 +401,10 @@ module ActiveRecord
             rows
           end
         end
-        
+
         def finish_statement_handle(handle)
           case @connection_options[:mode]
-          when :dblib  
+          when :dblib
           when :odbc
             handle.drop if handle && handle.respond_to?(:drop) && !handle.finished?
           when :adonet
@@ -406,7 +413,7 @@ module ActiveRecord
           end
           handle
         end
-        
+
       end
     end
   end
